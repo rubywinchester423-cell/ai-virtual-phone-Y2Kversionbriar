@@ -109,3 +109,4 @@ android-shell/
 - `supabase/functions/push-generate/index.ts` 需要是包含 shellpush 广播的最新版
   （改动后需重新部署边缘函数）。
 - Realtime 广播用 service key 直接调 HTTP API，无需额外建表或改配置。
+ 
