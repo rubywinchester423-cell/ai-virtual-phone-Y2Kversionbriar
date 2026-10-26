@@ -43,16 +43,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
 
-    private val fileChooserLauncher = registerForActivityResult(
+        private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val callback = filePathCallback ?: return@registerForActivityResult
         filePathCallback = null
-                callback.onReceiveValue(
+        callback.onReceiveValue(
             WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
         )
-
-    private val notifPermissionLauncher = registerForActivityResult(
+    }
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) PushService.start(this)
