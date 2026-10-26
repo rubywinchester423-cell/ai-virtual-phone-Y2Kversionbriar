@@ -35,7 +35,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         val SITE_URL: String = BuildConfig.SITE_URL
-        const val VERSION = "1.0.0"
+        const val VERSION = "1.0.1"
         /** 来电接听等场景的站内深链（必须以 SITE_URL 开头，否则忽略） */
         const val EXTRA_OPEN_URL = "open_url"
     }
@@ -46,11 +46,22 @@ class MainActivity : AppCompatActivity() {
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        val callback = filePathCallback ?: return@registerForActivityResult
+        val callback = filePathCallback ?: run {
+            Toast.makeText(this, "诊断：没有等待中的回调", Toast.LENGTH_LONG).show()
+            return@registerForActivityResult
+        }
         filePathCallback = null
-        callback.onReceiveValue(
-            WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
-        )
+        val uris = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        val first = uris?.firstOrNull()
+        val readable = first?.let {
+            runCatching { contentResolver.openInputStream(it)?.use { stream -> stream.available() } }.getOrNull()
+        }
+        Toast.makeText(
+            this,
+            "诊断 v$VERSION：resultCode=${result.resultCode}，选中=${uris?.size ?: 0}，首个可读=$readable",
+            Toast.LENGTH_LONG,
+        ).show()
+        callback.onReceiveValue(uris)
     }
 
     private val notifPermissionLauncher = registerForActivityResult(
