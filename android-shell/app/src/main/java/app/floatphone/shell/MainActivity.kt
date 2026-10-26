@@ -35,7 +35,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         val SITE_URL: String = BuildConfig.SITE_URL
-        const val VERSION = "1.0.2"
+        const val VERSION = "1.0.3"
         /** 来电接听等场景的站内深链（必须以 SITE_URL 开头，否则忽略） */
         const val EXTRA_OPEN_URL = "open_url"
     }
@@ -46,22 +46,11 @@ class MainActivity : AppCompatActivity() {
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        val callback = filePathCallback ?: run {
-            Toast.makeText(this, "诊断：没有等待中的回调", Toast.LENGTH_LONG).show()
-            return@registerForActivityResult
-        }
+        val callback = filePathCallback ?: return@registerForActivityResult
         filePathCallback = null
-        val uris = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
-        val first = uris?.firstOrNull()
-        val readable = first?.let {
-            runCatching { contentResolver.openInputStream(it)?.use { stream -> stream.available() } }.getOrNull()
-        }
-        Toast.makeText(
-            this,
-            "诊断 v$VERSION(文件)：resultCode=${result.resultCode}，选中=${uris?.size ?: 0}，首个可读=$readable，intent=${result.data != null}，clip=${result.data?.clipData?.itemCount}",
-            Toast.LENGTH_LONG,
-        ).show()
-        callback.onReceiveValue(uris)
+        callback.onReceiveValue(
+            WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        )
     }
 
     // 图片选择改用系统相册选择器接口：部分手机上旧式的文件选择返回不了图片
@@ -70,7 +59,6 @@ class MainActivity : AppCompatActivity() {
     ) { uris: List<Uri> ->
         val callback = filePathCallback
         filePathCallback = null
-        Toast.makeText(this, "诊断 v$VERSION(相册)：返回 ${uris.size} 张", Toast.LENGTH_LONG).show()
         callback?.onReceiveValue(uris.toTypedArray())
     }
 
