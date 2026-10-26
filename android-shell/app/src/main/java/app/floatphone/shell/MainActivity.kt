@@ -48,9 +48,9 @@ class MainActivity : AppCompatActivity() {
     ) { result ->
         val callback = filePathCallback ?: return@registerForActivityResult
         filePathCallback = null
-        val data = result.data?.data
-        callback.onReceiveValue(if (data != null) arrayOf(data) else emptyArray())
-    }
+                callback.onReceiveValue(
+            WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        )
 
     private val notifPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
