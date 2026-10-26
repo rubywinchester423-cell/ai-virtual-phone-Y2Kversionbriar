@@ -35,9 +35,43 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         val SITE_URL: String = BuildConfig.SITE_URL
-        const val VERSION = "1.0.3"
+        const val VERSION = "1.0.4"
         /** 来电接听等场景的站内深链（必须以 SITE_URL 开头，否则忽略） */
         const val EXTRA_OPEN_URL = "open_url"
+        /** 网页里 <a download href="blob:..."> 的导出在 WebView 里不会自动保存：拦截后分块交给原生写入「下载」目录 */
+        val DOWNLOAD_HOOK_JS: String = """
+            (function () {
+              if (window.__floatDownloadHook) return;
+              window.__floatDownloadHook = true;
+              function sendBlob(blob, name, mime) {
+                var size = blob.size, CH = 786432;
+                function next(off) {
+                  if (off >= size) { window.AndroidShell.finishSave(); return; }
+                  var fr = new FileReader();
+                  fr.onload = function () {
+                    var s = String(fr.result);
+                    s = s.substring(s.indexOf(',') + 1);
+                    window.AndroidShell.saveChunk(name, mime, s, off === 0);
+                    next(off + CH);
+                  };
+                  fr.readAsDataURL(blob.slice(off, off + CH));
+                }
+                next(0);
+              }
+              document.addEventListener('click', function (e) {
+                var a = e.target && e.target.closest ? e.target.closest('a[download]') : null;
+                if (!a) return;
+                var href = a.href || '';
+                if (href.indexOf('blob:') !== 0 && href.indexOf('data:') !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                var name = a.getAttribute('download') || 'download';
+                fetch(href).then(function (r) { return r.blob(); }).then(function (b) {
+                  sendBlob(b, name, b.type || 'application/octet-stream');
+                });
+              }, true);
+            })();
+        """.trimIndent()
     }
 
     private lateinit var webView: WebView
@@ -139,6 +173,10 @@ class MainActivity : AppCompatActivity() {
                 return runCatching {
                     startActivity(Intent(Intent.ACTION_VIEW, url)); true
                 }.getOrDefault(true)
+            }
+
+            override fun onPageFinished(view: WebView, url: String?) {
+                view.evaluateJavascript(DOWNLOAD_HOOK_JS, null)
             }
         }
 
@@ -272,6 +310,80 @@ class MainActivity : AppCompatActivity() {
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
             }
+        }
+
+        private var saveOut: java.io.OutputStream? = null
+        private var saveUri: Uri? = null
+        private var saveName: String = ""
+
+        /** 网页分块（base64）传来的导出文件；first=true 表示新文件的第一块。 */
+        @JavascriptInterface
+        @Synchronized
+        fun saveChunk(name: String, mime: String, base64: String, first: Boolean) {
+            runCatching {
+                if (first) {
+                    closeSave()
+                    openSave(name, mime)
+                }
+                saveOut?.write(android.util.Base64.decode(base64, android.util.Base64.DEFAULT))
+            }.onFailure { error ->
+                closeSave()
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "保存失败：${error.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+        @JavascriptInterface
+        @Synchronized
+        fun finishSave() {
+            val name = saveName
+            val ok = closeSave()
+            runOnUiThread {
+                Toast.makeText(
+                    this@MainActivity,
+                    if (ok) "已保存到「下载」：$name" else "保存失败",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+
+        private fun openSave(name: String, mime: String) {
+            saveName = name
+            if (Build.VERSION.SDK_INT >= 29) {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val uri = contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: throw java.io.IOException("无法创建文件")
+                saveUri = uri
+                saveOut = contentResolver.openOutputStream(uri)
+            } else {
+                val dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+                saveOut = java.io.File(dir, name).outputStream()
+            }
+        }
+
+        private fun closeSave(): Boolean {
+            val out = saveOut
+            val uri = saveUri
+            saveOut = null
+            saveUri = null
+            if (out == null) return false
+            return runCatching {
+                out.flush()
+                out.close()
+                if (uri != null && Build.VERSION.SDK_INT >= 29) {
+                    val values = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                    }
+                    contentResolver.update(uri, values, null, null)
+                }
+                true
+            }.getOrDefault(false)
         }
     }
 }
