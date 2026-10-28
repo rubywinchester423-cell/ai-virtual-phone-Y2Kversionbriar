@@ -35,7 +35,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         val SITE_URL: String = BuildConfig.SITE_URL
-        const val VERSION = "1.0.4"
+        const val VERSION = "1.0.5"
         /** 来电接听等场景的站内深链（必须以 SITE_URL 开头，否则忽略） */
         const val EXTRA_OPEN_URL = "open_url"
         /** 网页里 <a download href="blob:..."> 的导出在 WebView 里不会自动保存：拦截后分块交给原生写入「下载」目录 */
@@ -58,17 +58,25 @@ class MainActivity : AppCompatActivity() {
                 }
                 next(0);
               }
-              document.addEventListener('click', function (e) {
-                var a = e.target && e.target.closest ? e.target.closest('a[download]') : null;
-                if (!a) return;
+              function handle(a) {
                 var href = a.href || '';
-                if (href.indexOf('blob:') !== 0 && href.indexOf('data:') !== 0) return;
-                e.preventDefault();
-                e.stopPropagation();
+                if (!a.hasAttribute('download')) return false;
+                if (href.indexOf('blob:') !== 0 && href.indexOf('data:') !== 0) return false;
                 var name = a.getAttribute('download') || 'download';
                 fetch(href).then(function (r) { return r.blob(); }).then(function (b) {
                   sendBlob(b, name, b.type || 'application/octet-stream');
                 });
+                return true;
+              }
+              // 页面里常用 document.createElement('a').click()（元素未挂到页面上，点击事件不会冒泡），所以直接接管 click()
+              var origClick = HTMLAnchorElement.prototype.click;
+              HTMLAnchorElement.prototype.click = function () {
+                if (handle(this)) return;
+                return origClick.apply(this, arguments);
+              };
+              document.addEventListener('click', function (e) {
+                var a = e.target && e.target.closest ? e.target.closest('a[download]') : null;
+                if (a && handle(a)) { e.preventDefault(); e.stopPropagation(); }
               }, true);
             })();
         """.trimIndent()
