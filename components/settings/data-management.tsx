@@ -27,6 +27,7 @@ import {
 import { DATA_MODULES, getLightModuleIds } from "@/lib/data-management/modules";
 import { BINDING_ACCENTS, CONTENT_APP_ACCENTS } from "@/lib/ui-accent-colors";
 import { Select, Toggle } from "@/components/ui/form";
+import { CloudManualBind } from "@/components/settings/cloud-manual-bind";
 import styles from "./data-management.module.css";
 import { backupIdentityCards } from "@/lib/data-management/identity-backup";
 import { ConfirmDialog, ContentDialog } from "@/components/ui/modal";
@@ -929,6 +930,8 @@ export function DataManagement({ onNotice }: DataManagementProps) {
               </div>
             )}
           </div>
+
+          <CloudManualBind onBound={(config) => setCloudConfig(config)} />
 
           <div className="menu-item data-readonly-item">
             <div className="menu-label-group">
